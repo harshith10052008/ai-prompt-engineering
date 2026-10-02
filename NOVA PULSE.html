@@ -1,0 +1,204 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>NOVA PULSE</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+:root{--bg:#f4f7fc;--card:#fff;--tx:#0b1b3a;--mu:#5b6b88;--nv:#0a2351;--bl:#1f6fff;--bd:#dbe3f1;--ok:#0f9d58;--wn:#d98200;--er:#d93025;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#081428;--card:#0f2040;--tx:#eaf0ff;--mu:#9db0d3;--bd:#22365f}}
+*{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.45 system-ui,Segoe UI,Roboto,sans-serif}
+header{background:var(--nv);color:#fff;padding:10px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+header b{font-size:18px;letter-spacing:.5px}header b span{color:#5aa2ff}
+select,input,button{font:inherit;border:1px solid var(--bd);border-radius:8px;padding:6px 9px;background:var(--card);color:var(--tx)}
+button{cursor:pointer;background:var(--bl);color:#fff;border:0}button.g{background:transparent;color:var(--bl);border:1px solid var(--bl)}button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid #5aa2ff}
+nav{display:flex;gap:6px;overflow-x:auto;padding:8px 12px;background:var(--card);border-bottom:1px solid var(--bd)}
+nav button{background:transparent;color:var(--tx);white-space:nowrap}nav button.on{background:var(--bl);color:#fff}
+main{padding:14px;max-width:1200px;margin:auto}
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+.c{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px;margin-bottom:12px}
+.k{font-size:22px;font-weight:700}.m{color:var(--mu);font-size:12px}
+.tw{overflow-x:auto}table{border-collapse:collapse;width:100%}th,td{padding:6px 8px;border-bottom:1px solid var(--bd);text-align:left;white-space:nowrap}
+.tag{padding:2px 8px;border-radius:99px;font-size:12px;color:#fff}.hi{background:var(--er)}.md{background:var(--wn)}.lo{background:var(--ok)}
+.bar{height:14px;background:var(--bl);border-radius:4px}.row{display:flex;gap:8px;align-items:center;margin:4px 0}.row span:first-child{width:170px;font-size:12px}
+.note{font-size:12px;color:var(--mu);border-left:3px solid var(--bl);padding-left:8px;margin:8px 0}
+.two{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
+label{display:block;margin:6px 0 2px;font-size:12px}pre{white-space:pre-wrap;font-size:12px}
+</style></head><body>
+<header><b>NOVA <span>PULSE</span></b><span class="m" style="color:#b9c8ea">Business Rescue Console · demo</span>
+<span style="flex:1"></span><label for="role" style="margin:0;color:#fff">Role</label>
+<select id="role" aria-label="Switch demo role"></select><button class="g" id="reset" style="color:#fff;border-color:#fff">Reset demo data</button></header>
+<nav id="nav" aria-label="Sections"></nav><main id="main"></main>
+<script>
+// ===== Case data (provided) vs synthetic (generated). All labels shown in UI. =====
+const CASE={base:{users:82000,mau:39000,orders:31200,aov:452,rep:41,del:29,can:6,tix:3100,promo:9.5,rev:21.8},
+cur:{users:120000,mau:46000,orders:38500,aov:486,rep:27,del:37,can:11,tix:5900,promo:17,rev:26.1},
+cancel:{"Unavailable product":35,"Delivery delay":27,"Store rejection":18,"No delivery partner":12,"Other":8},
+tix:{"Refund status":29,"Delivery delay":24,"Missing/unavailable":19,"Coupon":13,"Incorrect order":9,"Other":6}};
+const take=CASE.cur.rev*1e5/CASE.cur.orders; // derived net revenue per order (₹) – revenue is NOT GMV
+const CITIES=["Pune","Indore","Nagpur"],ROLES={admin:["dash","orders","inv","sup","mkt","sim","road","test"],ops:["dash","orders","sim","road"],store:["inv"],support:["sup","dash"],mkt:["dash","mkt","sim"]};
+const ROLENAME={admin:"Administrator",ops:"Operations Manager",store:"Partner-Store Owner (Store 1)",support:"Support Agent",mkt:"Marketing Analyst"};
+const VIEWS={dash:"Executive",orders:"Command Center",inv:"Inventory",sup:"Support",mkt:"Marketing",sim:"Impact Simulator",road:"Roadmap & Budget",test:"Self-tests"};
+const ROAD=[["Unified data layer (orders+inventory+tickets)","Tech lead",1,4.5,"—","Legacy APIs inconsistent"],["Store inventory app: CSV/bulk/quick-toggle","Product",1,3.5,"Data layer","Store adoption"],["Order-risk engine + ops console","Ops/Eng",2,4,"Data layer","False alerts → alert fatigue"],["Support refund-status tracker + macros","Support lead",3,2.5,"Data layer","Payment gateway access"],["Retention journeys (3rd-order nudges, no deep discount)","Marketing",4,2.5,"Risk engine","Consent / DND rules"],["Delivery partner capacity buffer (peak incentives)","Ops",3,3,"Console","Unit cost overrun"],["Measurement: holdout tests & dashboards","Data",5,1.5,"All","Small samples"],["Contingency","PMO",6,1.5,"—","—"]];
+const BUDGET=25;
+const W0={fresh:25,avail:35,accept:15,cap:10,hist:10,delay:5};
+
+// ===== Pure logic (also used by self-tests) =====
+const chg=(c,b)=>({abs:c-b,rel:b?((c-b)/b)*100:null});
+function risk(o,s,W,now){const it=s.inv.find(i=>i.sku===o.sku&&i.store===o.store),st=s.stores.find(x=>x.id===o.store),f=[];
+ const age=it?(now-it.upd)/36e5:99;
+ f.push(["Inventory freshness",Math.min(1,age/48)*W.fresh,`last updated ${age.toFixed(1)} h ago (full weight at 48 h)`]);
+ let a=0,t="in stock";if(!it||it.qty<=0||it.off){a=1;t="shows unavailable/zero"}else if(it.qty<o.qty){a=1;t=`stock ${it.qty} < ordered ${o.qty}`}else if(it.qty<=it.thr){a=.5;t=`stock ${it.qty} ≤ threshold ${it.thr}`}
+ f.push(["Stock availability",a*W.avail,t]);
+ f.push(["Store acceptance",Math.min(1,Math.max(0,(.97-st.accept)/.2))*W.accept,`acceptance ${(st.accept*100).toFixed(0)}% (0 pts at ≥97%)`]);
+ f.push(["Delivery capacity",Math.max(0,(st.util-.7)/.3)*W.cap,`partner utilisation ${(st.util*100).toFixed(0)}%`]);
+ f.push(["Historical cancellations",Math.min(1,st.canc/.2)*W.hist,`store cancel rate ${(st.canc*100).toFixed(1)}%`]);
+ f.push(["Estimated delay",Math.min(1,Math.max(0,(o.eta-30)/30))*W.delay,`ETA ${o.eta} min (0 pts ≤30)`]);
+ const score=Math.round(Math.min(100,f.reduce((x,y)=>x+y[1],0)));return{score,f}}
+function scenario(p,effMult=1){const B=CASE.cur,eff=p.eff/100*effMult;
+ const rec=B.orders*(B.can/100)*(p.prev/100)*eff;
+ const rep=Math.max(0,B.mau*p.rep/100-rec); // repeat uplift net of already-recovered customers (no double count)
+ const lost=B.orders*(p.cut/100)*p.elas/100;
+ const inc=rec+rep-lost,rev=inc*take,cm=rev*p.cm/100,sav=B.promo*1e5*p.cut/100;
+ const tix=rec*p.tpo,mo=cm+sav,total=mo*p.months-p.cost*1e5;
+ return{rec,rep,lost,inc,rev,cm,sav,tix,mo,total,roi:p.cost?total/(p.cost*1e5)*100:null}}
+const roadTotal=()=>ROAD.reduce((x,r)=>x+r[3],0);
+
+// ===== Seed (deterministic PRNG) =====
+function rng(a){return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function seed(){const R=rng(2026),now=Date.now(),P=[["Basmati rice 5kg","Grocery"],["Toned milk 1L","Dairy"],["Paracetamol strip","Pharmacy"],["Notebook A4","Stationery"],["Onions 1kg","Produce"],["Detergent 1kg","Household"]];
+ const stores=[],inv=[],orders=[];
+ for(let i=1;i<=9;i++){const c=CITIES[(i-1)%3];stores.push({id:i,name:`${c} Mart ${Math.ceil(i/3)}`,city:c,accept:.78+R()*.19,util:.55+R()*.4,canc:.03+R()*.12});
+  P.forEach((p,j)=>inv.push({store:i,sku:"SKU"+(j+1),name:p[0],cat:p[1],qty:Math.floor(R()*22),thr:5,off:false,upd:now-R()*R()*96*36e5,hist:[]}))}
+ for(let k=1;k<=40;k++){const s=stores[Math.floor(R()*9)],j=Math.floor(R()*6);orders.push({id:1000+k,store:s.id,city:s.city,sku:"SKU"+(j+1),qty:1+Math.floor(R()*3),cust:"C"+(200+Math.floor(R()*120)),eta:25+Math.floor(R()*30),val:Math.round(300+R()*400),cat:P[j][1],status:"Open",r0:null,log:[]})}
+ const tk=[["Refund status","Refund not received for order 1003"],["Delivery delay","Order late by 25 min"],["Coupon","Coupon NEW50 rejected"],["Missing/unavailable","Item missing in bag"],["Refund status","Refund pending 4 days"],["Incorrect order","Wrong brand delivered"]].map((t,i)=>({id:5001+i,type:t[0],txt:t[1],order:1001+i*3,pri:i%2?"Medium":"High",owner:"",status:"Open",refund:t[0]==="Refund status"?"Initiated":"n/a",tl:[[now-(i+1)*36e5*5,"Ticket created"]],notes:[]}));
+ const s={stores,inv,orders,tk,W:{...W0},ilog:[],camp:[["Welcome 50% off",6.2,2100,1400,.18],["Weekend free delivery",4.1,1500,900,.31],["Referral ₹100",3.5,1100,700,.22],["Loyalty 3rd-order bonus",1.2,420,380,.52],["Reminder push (no discount)",.4,310,310,.35]].map(c=>({n:c[0],spend:c[1],reg:c[2],first:c[3],rep:c[4]})),
+  p:{prev:50,eff:30,rep:1,cut:20,elas:15,cm:60,tpo:.5,months:4,cost:roadTotal()},city:"All",t0:now};
+ s.orders.forEach(o=>o.r0=risk(o,s,s.W,now).score);return s}
+let S=null;try{S=JSON.parse(localStorage.getItem("novaPulse")||"null")}catch(e){}if(!S)S=seed();
+const save=()=>{try{localStorage.setItem("novaPulse",JSON.stringify(S))}catch(e){}};
+let role="admin",view="dash",sel=null,q="",page=0,msg="";
+const $=id=>document.getElementById(id),esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const f1=n=>n.toLocaleString("en-IN",{maximumFractionDigits:1}),L=n=>"₹"+f1(n/1e5)+" L";
+const tg=s=>`<span class="tag ${s>=60?"hi":s>=35?"md":"lo"}">${s}</span>`;
+const bars=(o,u="%")=>{const m=Math.max(...Object.values(o));return Object.entries(o).map(([k,v])=>`<div class="row"><span>${k}</span><div class="bar" style="width:${v/m*55}%"></div><b>${v}${u}</b></div>`).join("")};
+function log(o,a,d){const e={t:Date.now(),a,d};o.log.push(e);S.ilog.push({...e,o:o.id})}
+function setRole(r){role=r;if(!ROLES[r].includes(view))view=ROLES[r][0];render()}
+
+// ===== Views =====
+function dash(){const B=CASE.base,C=CASE.cur,K=[["Registered users","users"],["Monthly active users","mau"],["Monthly orders","orders"],["Avg order value (₹)","aov"],["Repeat purchase rate (%)","rep"],["Delivery time (min)","del"],["Cancellation rate (%)","can"],["Support tickets / mo","tix"],["Promo spend (₹ L)","promo"],["Revenue (₹ L)","rev"]];
+ const cityF=S.city,os=S.orders.filter(o=>cityF==="All"||o.city===cityF),open=os.filter(o=>o.status==="Open"),sc=open.map(o=>risk(o,S,S.W,Date.now()).score);
+ return`<div class="note"><b>Case-provided figures</b> (baseline → current, as stated in the brief; denominators/periods are monthly as given). Changes calculated here. Synthetic demo data is labelled separately below.</div>
+ <div class="grid">${K.map(([n,k])=>{const c=chg(C[k],B[k]);return`<div class="c"><div class="m">${n}</div><div class="k">${f1(C[k])}</div><div class="m">was ${f1(B[k])} · ${c.abs>=0?"+":""}${f1(c.abs)} (${c.rel>=0?"+":""}${c.rel.toFixed(1)}%)</div></div>`}).join("")}</div>
+ <div class="two"><div class="c"><b>Cancellation reasons</b> <span class="m">(case-provided, % of cancellations, mutually exclusive)</span>${bars(CASE.cancel)}</div>
+ <div class="c"><b>Support ticket mix</b> <span class="m">(case-provided, % of tickets)</span>${bars(CASE.tix)}</div></div>
+ <div class="c"><b>Diagnosis (hypotheses, not proven causes)</b><ul><li>Orders +23% but repeat −14 pts and cancellations +5 pts: growth is driven by acquisition, while fulfilment quality erodes. <i>Correlation only.</i></li>
+ <li>Revenue/order is ≈₹${take.toFixed(0)} (derived: revenue ÷ orders); promo spend rose 79% vs revenue +20% → promos are costing more than they return.</li>
+ <li>Unavailable product (35%) + store rejection (18%) = 53% of cancellations are inventory/store-side and plausibly addressable. Ticket mix (refund status 29%) points to a visibility gap.</li>
+ <li>Customers who reach 3 orders reorder at 72% — the 2nd–3rd order is the retention lever; only 31% reach a 2nd order in 30 days.</li>
+ <li>Survey shares (38/34/29%) overlap (multi-select) and must not be summed.</li></ul></div>
+ <div class="c"><b>Live operations — synthetic demo data</b> <label style="display:inline">City </label><select id="city">${["All",...CITIES].map(c=>`<option ${c===cityF?"selected":""}>${c}</option>`).join("")}</select>
+ <div class="grid" style="margin-top:8px"><div><div class="k">${open.length}</div><div class="m">open orders</div></div><div><div class="k">${sc.filter(x=>x>=60).length}</div><div class="m">high-risk (≥60)</div></div><div><div class="k">${sc.length?f1(sc.reduce((a,b)=>a+b,0)/sc.length):"–"}</div><div class="m">avg risk</div></div><div><div class="k">${os.filter(o=>o.status==="Resolved").length}</div><div class="m">resolved by interventions</div></div></div></div>`}
+
+function orders(){const now=Date.now();let rows=S.orders.map(o=>({o,r:risk(o,S,S.W,now)})).filter(x=>(x.o.id+x.o.cust+x.o.cat).toLowerCase().includes(q.toLowerCase())).sort((a,b)=>(a.o.status==="Open"?0:1)-(b.o.status==="Open"?0:1)||b.r.score-a.r.score);
+ const pg=Math.max(0,Math.min(page,Math.ceil(rows.length/10)-1)),vis=rows.slice(pg*10,pg*10+10);
+ const prot=S.orders.filter(o=>o.status==="Resolved"&&o.r0>=60).length;
+ let det="";if(sel){const o=S.orders.find(x=>x.id===sel),r=risk(o,S,S.W,now),it=S.inv.find(i=>i.sku===o.sku&&i.store===o.store),alts=S.inv.filter(i=>i.sku===o.sku&&i.store!==o.store&&i.qty>=o.qty&&!i.off&&(now-i.upd)<12*36e5&&S.stores.find(s=>s.id===i.store).city===o.city);
+ det=`<div class="c"><b>Order #${o.id}</b> · ${o.status} · ${esc(it.name)} ×${o.qty} · store ${esc(S.stores.find(s=>s.id===o.store).name)} · risk ${tg(r.score)} (initial ${o.r0})
+ <div class="tw"><table><tr><th>Factor</th><th>Points</th><th>Evidence</th></tr>${r.f.map(f=>`<tr><td>${f[0]}</td><td>${f[1].toFixed(1)}</td><td>${esc(f[2])}</td></tr>`).join("")}</table></div>
+ <div class="note">Rule-based, configurable score (weights sum to 100). It is not a trained prediction.</div>
+ ${o.status==="Open"?`<div class="row" style="flex-wrap:wrap"><button data-a="confirm">1 Request stock confirmation</button>
+ <label style="margin:0" for="cq">Counted qty</label><input id="cq" type="number" min="0" max="999" style="width:80px"><button data-a="correct">2 Record correction</button>
+ <button data-a="notify" class="g">3 Notify customer (simulated)</button>
+ <select id="alt"><option value="">Alternative store…</option>${alts.map(a=>`<option value="${a.store}">${esc(S.stores.find(s=>s.id===a.store).name)} (qty ${a.qty})</option>`).join("")}</select><button data-a="reassign" class="g">Reassign</button>
+ <button data-a="resolve">4 Resolve</button></div><div class="m">${alts.length?"":"No fresh nearby stock for this item."}</div>`:""}
+ <b>Intervention log</b><ul>${o.log.map(l=>`<li>${new Date(l.t).toLocaleTimeString()} — ${esc(l.a)}: ${esc(l.d)}</li>`).join("")||"<li class=m>none yet</li>"}</ul></div>`}
+ return`<div class="note">Seeded synthetic orders. Actions persist in this browser (localStorage). Messages are simulated — nothing is sent.</div>
+ <div class="grid"><div class="c"><div class="k">${prot}</div><div class="m">high-risk orders resolved</div></div><div class="c"><div class="k">${L(prot*take)}</div><div class="m">est. net revenue protected (modeled: orders × ₹${take.toFixed(0)}; synthetic)</div></div></div>
+ <div class="c"><label for="q">Search orders (id, customer, category)</label><input id="q" value="${esc(q)}" placeholder="e.g. 1007 or Dairy"> <button class="g" data-a="csv">Export CSV</button>
+ <div class="tw"><table><tr><th>Order</th><th>City</th><th>Item</th><th>Status</th><th>ETA</th><th>Risk</th><th>Top factor</th><th></th></tr>${vis.map(({o,r})=>`<tr><td>${o.id}</td><td>${o.city}</td><td>${o.cat}</td><td>${o.status}</td><td>${o.eta}m</td><td>${tg(r.score)}</td><td>${[...r.f].sort((a,b)=>b[1]-a[1])[0][0]}</td><td><button class="g" data-a="sel" data-id="${o.id}">Inspect</button></td></tr>`).join("")||"<tr><td colspan=8>No matching orders</td></tr>"}</table></div>
+ <button class="g" data-a="prev">Prev</button> <button class="g" data-a="next">Next</button> <span class="m">page ${pg+1}</span></div>${det}
+ <div class="c"><b>Risk weights</b> <span class="m">(configurable; scores recompute)</span><div class="row" style="flex-wrap:wrap">${Object.keys(S.W).map(k=>`<label>${k}<input data-w="${k}" type="number" min="0" max="100" value="${S.W[k]}" style="width:70px"></label>`).join("")}</div><div class="m">Sum = ${Object.values(S.W).reduce((a,b)=>a+b,0)} (raw points are capped at 100)</div></div>`}
+
+function inv(){const now=Date.now(),mine=role==="store"?S.inv.filter(i=>i.store===1):S.inv.filter(i=>S.city==="All"||S.stores.find(s=>s.id===i.store).city===S.city);
+ const flag=i=>i.off?"Marked unavailable":i.qty<=0?"Unavailable":(now-i.upd)/36e5>48?"Stale (>48h)":i.qty<=i.thr?"Low stock":"OK";
+ return`<div class="note">Inventory is stored in this app only; there are no live integrations with partner systems.${role==="store"?" Showing Store 1 only (role-scoped).":""}</div>
+ <div class="c"><b>Bulk / CSV import</b> <span class="m">columns: sku,qty (applies to ${role==="store"?"Store 1":"Store 1"})</span><br><input type="file" id="csvf" accept=".csv" aria-label="CSV file"> <button class="g" data-a="icsv">Export CSV</button><pre id="cres">${esc(msg)}</pre></div>
+ <div class="c tw"><table><tr><th>Store</th><th>Item</th><th>Qty</th><th>Updated</th><th>Flag</th><th>Update</th></tr>${mine.slice(0,60).map((i,n)=>{const k=S.inv.indexOf(i),fl=flag(i);return`<tr><td>${S.stores.find(s=>s.id===i.store).name}</td><td>${i.name}</td><td>${i.qty}</td><td>${((now-i.upd)/36e5).toFixed(1)}h ago</td><td>${fl==="OK"?fl:`<span class="tag ${fl==="Low stock"||fl.startsWith("Stale")?"md":"hi"}">${fl}</span>`}</td><td><input type="number" min="0" max="999" id="q${k}" style="width:70px" aria-label="Qty ${esc(i.name)}"><button class="g" data-a="setq" data-k="${k}">Save</button><button class="g" data-a="off" data-k="${k}">${i.off?"Restore":"Mark unavailable"}</button></td></tr>`}).join("")}</table></div>`}
+
+function sup(){const TS=S.tk;return`<div class="note">Refunds are simulated; no payment gateway is connected. Avg resolution in case data: 9.2 h.</div>
+ <div class="c"><b>New ticket</b><div class="row" style="flex-wrap:wrap"><select id="nt">${Object.keys(CASE.tix).map(t=>`<option>${t}</option>`).join("")}</select><input id="ntx" placeholder="Description (required)" style="flex:1"><input id="nto" type="number" placeholder="Order #" style="width:100px"><button data-a="newt">Create</button></div><div class="m" style="color:var(--er)">${esc(msg)}</div></div>
+ ${TS.map(t=>`<div class="c"><b>#${t.id}</b> ${t.type} · <span class="tag ${t.status==="Resolved"?"lo":"md"}">${t.status}</span> · priority ${t.pri} · owner ${t.owner||"unassigned"} · order ${t.order} ${t.refund!=="n/a"?`· refund: <b>${t.refund}</b>`:""}<br>${esc(t.txt)}
+ <div class="row" style="flex-wrap:wrap"><button class="g" data-a="own" data-id="${t.id}">Assign to me</button><button class="g" data-a="pri" data-id="${t.id}">Toggle priority</button>${t.refund==="Initiated"?`<button class="g" data-a="ref" data-id="${t.id}">Mark simulated refund processed</button>`:""}<input id="n${t.id}" placeholder="Internal note"><button class="g" data-a="note" data-id="${t.id}">Add note</button>${t.status!=="Resolved"?`<button data-a="res" data-id="${t.id}">Resolve</button>`:""}</div>
+ <ul class="m">${t.tl.concat(t.notes.map(n=>[n[0],"Note: "+n[1]])).sort((a,b)=>a[0]-b[0]).map(e=>`<li>${new Date(e[0]).toLocaleString()} — ${esc(e[1])}</li>`).join("")}</ul></div>`).join("")}`}
+
+function mkt(){return`<div class="note">Synthetic campaign data. Registrations ≠ value: compare cost per <i>repeat</i> customer. Contribution = repeat customers × orders × ₹${take.toFixed(0)} net revenue × margin assumption ${S.p.cm}%.</div>
+ <div class="c tw"><table><tr><th>Campaign</th><th>Spend (₹ L)</th><th>Registrations</th><th>First orders</th><th>CAC (₹/first order)</th><th>Repeat rate</th><th>₹ per repeat customer</th></tr>${S.camp.map(c=>{const rp=c.first*c.rep;return`<tr><td>${c.n}</td><td>${c.spend}</td><td>${c.reg}</td><td>${c.first}</td><td>${Math.round(c.spend*1e5/c.first)}</td><td>${(c.rep*100).toFixed(0)}%</td><td>${Math.round(c.spend*1e5/rp)}</td></tr>`}).join("")}</table></div>
+ <div class="note">Reading: the lowest-CAC campaigns can have the highest cost per repeat customer. Repeat rates here are synthetic cohort values, not measured results.</div>`}
+
+function sim(){const p=S.p,s=scenario(p),lo=scenario(p,.5),hi=scenario(p,1.5);
+ const sl=(k,n,mn,mx,st=1)=>`<label for="s_${k}">${n}: <b>${p[k]}</b></label><input id="s_${k}" data-p="${k}" type="range" min="${mn}" max="${mx}" step="${st}" value="${p[k]}" style="width:100%">`;
+ return`<div class="two"><div class="c"><b>Assumptions (editable)</b>${sl("prev",`Preventable share of cancellations (%)`,0,60)}${sl("eff","Intervention effectiveness (%)",0,100)}${sl("rep","Repeat-rate uplift (pts of MAU)",0,5,.5)}${sl("cut","Promo spend cut (%)",0,50)}${sl("elas","Orders lost per 100% promo cut (%)",0,50)}${sl("cm","Contribution margin on net revenue (%)",20,90)}${sl("tpo","Tickets avoided per recovered order",0,1,.1)}${sl("months","Months of full benefit in 6-mo window",1,6)}
+ <label>Implementation cost (₹ L) = roadmap total</label><b>${roadTotal()}</b> <span class="m">(cap ${BUDGET})</span></div>
+ <div class="c"><b>Baseline vs scenario (per month, ₹ units as shown)</b><div class="tw"><table><tr><th>Metric</th><th>Baseline</th><th>Scenario</th></tr>
+ <tr><td>Orders</td><td>${f1(CASE.cur.orders)}</td><td>${f1(CASE.cur.orders+s.inc)}</td></tr><tr><td>Cancellations</td><td>${f1(CASE.cur.orders*.11)}</td><td>${f1(CASE.cur.orders*.11-s.rec)}</td></tr><tr><td>Tickets</td><td>${f1(CASE.cur.tix)}</td><td>${f1(CASE.cur.tix-s.tix)}</td></tr><tr><td>Promo spend</td><td>${L(17e5)}</td><td>${L(17e5-s.sav)}</td></tr></table></div>
+ <p>Recovered orders <b>${f1(s.rec)}</b> · repeat orders (net) <b>${f1(s.rep)}</b> · promo-cut lost orders <b>−${f1(s.lost)}</b> → incremental <b>${f1(s.inc)}</b>/mo<br>
+ Incremental net revenue ${L(s.rev)} · contribution ${L(s.cm)} · promo savings ${L(s.sav)} → monthly benefit <b>${L(s.mo)}</b></p>
+ <p class="k">Net benefit ${L(s.total)} · ROI ${s.roi===null?"n/a":s.roi.toFixed(0)+"%"}</p><div class="m">Uncertainty (effectiveness ×0.5 / ×1.5): net ${L(lo.total)} to ${L(hi.total)}. This range varies only one assumption, so it is not a confidence interval.</div></div></div>
+ <div class="c"><b>Formulas</b><pre>Recovered orders = orders(38,500) × cancel rate(11%) × preventable share × effectiveness
+Repeat orders = max(0, MAU(46,000) × uplift − recovered)   [removes overlap with recovered]
+Lost orders = orders × promo cut × elasticity
+Incremental orders = recovered + repeat − lost
+Net revenue/order = revenue ₹26.1 L ÷ 38,500 = ₹${take.toFixed(1)} (derived; GMV is not added)
+Incremental revenue = incremental orders × net revenue/order
+Contribution = revenue × margin assumption;  Promo savings = baseline − scenario spend
+Net benefit = (contribution + savings) × months − implementation cost;  ROI = net ÷ cost × 100</pre>
+ <div class="note">All outputs are modeled estimates from the assumptions above — not measured results and not proven causal effects.</div></div>`}
+
+function road(){const t=roadTotal();return`<div class="note">Proposed budget only. Actual spend to date: ₹0 (no work started). Forecast ≠ measured results.</div><div class="c tw"><table><tr><th>Milestone</th><th>Owner</th><th>Month</th><th>Proposed ₹ L</th><th>Actual ₹ L</th><th>Depends on</th><th>Key risk</th></tr>${ROAD.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td>0</td><td>${r[4]}</td><td>${r[5]}</td></tr>`).join("")}<tr><th colspan=3>Total</th><th>${t}</th><th>0</th><th colspan=2>${t<=BUDGET?`Within ₹${BUDGET} L cap (headroom ${(BUDGET-t).toFixed(1)} L)`:"OVER BUDGET"}</th></tr></table></div>`}
+
+function test(){const T=[],A=(n,c)=>T.push([n,!!c]);
+ A("relative change 82000→120000 = 46.3%",Math.abs(chg(120000,82000).rel-46.3415)<1e-3);A("relative change handles zero baseline",chg(5,0).rel===null);
+ A("cancel rate 11% of 38,500 = 4,235",Math.round(38500*.11)===4235);A("cancellation shares sum to 100",Object.values(CASE.cancel).reduce((a,b)=>a+b)===100);A("ticket shares sum to 100",Object.values(CASE.tix).reduce((a,b)=>a+b)===100);
+ A("roadmap ≤ ₹25 L",roadTotal()<=BUDGET);
+ const s0=seed(),o=s0.orders[0],a=risk(o,s0,s0.W,Date.now()).score;const it=s0.inv.find(i=>i.sku===o.sku&&i.store===o.store);it.qty=0;it.upd=Date.now()-72*36e5;const b=risk(o,s0,s0.W,Date.now()).score;A("risk rises when stock=0 & stale",b>=a&&b>0);it.qty=50;it.upd=Date.now();A("risk falls after fresh correction",risk(o,s0,s0.W,Date.now()).score<=b);A("risk within 0–100",b<=100&&b>=0);
+ const p0={prev:50,eff:30,rep:0,cut:0,elas:15,cm:60,tpo:.5,months:4,cost:20},z=scenario({...p0,eff:0});A("zero effectiveness → zero recovered",z.rec===0);
+ const q=scenario({...p0,rep:2}),r=scenario(p0);A("repeat uplift net of recovered (no double count)",q.rep+r.rec<=CASE.cur.mau*.02+1e-6);A("promo savings = 17L × cut",Math.abs(scenario({...p0,cut:10}).sav-170000)<1e-6);A("ROI null when cost=0",scenario({...p0,cost:0}).roi===null);
+ const bad=T.filter(x=>!x[1]).length;return`<div class="note">Executed live in your browser just now: ${T.length-bad}/${T.length} passed.</div><div class="c"><ul>${T.map(x=>`<li>${x[1]?"✅":"❌"} ${x[0]}</li>`).join("")}</ul></div>`}
+
+// ===== Render & events =====
+function render(){const sel0=$("role");sel0.innerHTML=Object.keys(ROLES).map(r=>`<option value="${r}" ${r===role?"selected":""}>${ROLENAME[r]}</option>`).join("");
+ $("nav").innerHTML=ROLES[role].map(v=>`<button class="${v===view?"on":""}" data-v="${v}">${VIEWS[v]}</button>`).join("");
+ if(!ROLES[role].includes(view))view=ROLES[role][0];
+ try{$("main").innerHTML=({dash,orders,inv,sup,mkt,sim,road,test})[view]()}catch(e){$("main").innerHTML=`<div class="c">Something went wrong: ${esc(e.message)}</div>`}}
+function download(n,t){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([t],{type:"text/csv"}));a.download=n;a.click()}
+const tkOf=id=>S.tk.find(t=>t.id==id);
+document.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
+ if(b.id==="reset"){if(confirm("Reset all demo data to the seeded state?")){S=seed();sel=null;save();render()}return}
+ if(b.dataset.v){view=b.dataset.v;msg="";page=0;render();return}const a=b.dataset.a;if(!a)return;msg="";
+ const o=sel&&S.orders.find(x=>x.id===sel),now=Date.now();
+ if(a==="sel")sel=+b.dataset.id;
+ else if(a==="prev")page=Math.max(0,page-1);else if(a==="next")page++;
+ else if(a==="confirm"){log(o,"Stock confirmation requested","alert sent to store (simulated)");}
+ else if(a==="correct"){const v=$("cq").value;if(v===""||+v<0||!Number.isInteger(+v)){alert("Enter a whole number ≥ 0");return}const it=S.inv.find(i=>i.sku===o.sku&&i.store===o.store),old=it.qty;it.hist.push([now,old,+v]);it.qty=+v;it.upd=now;it.off=false;log(o,"Stock corrected",`${old} → ${v}; freshness reset`)}
+ else if(a==="notify"){log(o,"Customer notified","simulated message to "+o.cust)}
+ else if(a==="reassign"){const v=$("alt").value;if(!v){alert("Choose an alternative store first");return}const old=o.store;o.store=+v;log(o,"Reassigned",`store ${old} → ${v}`)}
+ else if(a==="resolve"){if(!confirm("Resolve order "+o.id+"?"))return;o.status="Resolved";log(o,"Resolved","closed by "+ROLENAME[role])}
+ else if(a==="csv"){download("orders.csv","id,city,sku,qty,status,risk\n"+S.orders.map(x=>[x.id,x.city,x.sku,x.qty,x.status,risk(x,S,S.W,now).score].join(",")).join("\n"));return}
+ else if(a==="icsv"){download("inventory.csv","store,sku,name,qty\n"+S.inv.map(i=>[i.store,i.sku,i.name,i.qty].join(",")).join("\n"));return}
+ else if(a==="setq"){const i=S.inv[+b.dataset.k],v=$("q"+b.dataset.k).value;if(role==="store"&&i.store!==1)return;if(v===""||!Number.isInteger(+v)||+v<0){alert("Enter a whole number ≥ 0");return}i.hist.push([now,i.qty,+v]);i.qty=+v;i.upd=now}
+ else if(a==="off"){const i=S.inv[+b.dataset.k];i.off=!i.off;i.upd=now}
+ else if(a==="newt"){const d=$("ntx").value.trim(),n=$("nto").value;if(!d){msg="Description is required";render();return}if(n&&!S.orders.find(x=>x.id==n)){msg="Order number not found";render();return}S.tk.unshift({id:5001+S.tk.length,type:$("nt").value,txt:d,order:n||"—",pri:"Medium",owner:"",status:"Open",refund:$("nt").value==="Refund status"?"Initiated":"n/a",tl:[[now,"Ticket created"]],notes:[]})}
+ else if(a==="own"){const t=tkOf(b.dataset.id);t.owner=ROLENAME[role];t.status="In progress";t.tl.push([now,"Assigned to "+t.owner])}
+ else if(a==="pri"){const t=tkOf(b.dataset.id);t.pri=t.pri==="High"?"Medium":"High";t.tl.push([now,"Priority → "+t.pri])}
+ else if(a==="ref"){const t=tkOf(b.dataset.id);t.refund="Processed (simulated)";t.tl.push([now,"Refund marked processed (simulated, no gateway)"])}
+ else if(a==="note"){const t=tkOf(b.dataset.id),v=$("n"+t.id).value.trim();if(!v)return;t.notes.push([now,v])}
+ else if(a==="res"){const t=tkOf(b.dataset.id);t.status="Resolved";t.tl.push([now,"Resolved"])}
+ save();render()});
+document.addEventListener("input",e=>{const t=e.target;
+ if(t.dataset.p){S.p[t.dataset.p]=+t.value;save();const x=t.selectionStart;render();$("s_"+t.dataset.p).focus()}
+ else if(t.dataset.w){const v=+t.value;if(v>=0&&v<=100){S.W[t.dataset.w]=v;save();render();document.querySelector(`[data-w=${t.dataset.w}]`).focus()}}
+ else if(t.id==="q"){q=t.value;page=0;render();const i=$("q");i.focus();i.setSelectionRange(q.length,q.length)}});
+document.addEventListener("change",e=>{const t=e.target;
+ if(t.id==="role")setRole(t.value);
+ else if(t.id==="city"){S.city=t.value;save();render()}
+ else if(t.id==="csvf"&&t.files[0]){const rd=new FileReader();rd.onload=()=>{const L2=rd.result.split(/\r?\n/).filter(Boolean),err=[];let ok=0;L2.slice(1).forEach((l,n)=>{const[c,v]=l.split(",").map(x=>x.trim()),it=S.inv.find(i=>i.store===1&&i.sku===c);if(!it)err.push(`row ${n+2}: unknown SKU "${c}"`);else if(!/^\d+$/.test(v))err.push(`row ${n+2}: invalid qty "${v}"`);else{it.hist.push([Date.now(),it.qty,+v]);it.qty=+v;it.upd=Date.now();ok++}});msg=`Imported ${ok} row(s). ${err.length} error(s).\n`+err.join("\n");save();render()};rd.readAsText(t.files[0])}});
+render();
+</script></body></html>
